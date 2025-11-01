@@ -1,19 +1,23 @@
-import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { createOpenAI } from '@ai-sdk/openai';
+import { streamText } from 'ai';
 
-const openai = new OpenAI({
-  baseURL: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
+// Configurar OpenRouter como proveedor personalizado
+const openrouter = createOpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
-  defaultHeaders: {
+  baseURL: 'https://openrouter.ai/api/v1',
+  headers: {
     'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
     'X-Title': 'ChadBot',
   },
-  timeout: 60000, // 60 segundos de timeout
-  maxRetries: 2, // 2 reintentos en caso de fallo
 });
+
+// Configuración de runtime para Edge (opcional, mejora performance)
+export const runtime = 'edge';
 
 // Función para sanitizar texto
 function sanitizeText(text: string): string {
+  if (typeof text !== 'string') return '';
+  
   return text
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -24,89 +28,161 @@ function sanitizeText(text: string): string {
     .slice(0, 5000); // Limitar longitud máxima
 }
 
-export async function POST(request: NextRequest) {
+// Validar estructura de mensajes (AI SDK v5 format)
+function validateMessages(messages: any[]): boolean {
+  if (!Array.isArray(messages)) return false;
+  
+  return messages.every(
+    (msg) =>
+      msg &&
+      typeof msg === 'object' &&
+      typeof msg.role === 'string' &&
+      ['user', 'assistant', 'system'].includes(msg.role) &&
+      (
+        // Formato v5 con parts
+        (Array.isArray(msg.parts) && msg.parts.length > 0) ||
+        // Formato legacy con content (por compatibilidad)
+        typeof msg.content === 'string'
+      )
+  );
+}
+
+// Extraer texto de los parts del mensaje
+function extractTextFromMessage(msg: any): string {
+  // Si tiene parts (formato v5)
+  if (msg.parts && Array.isArray(msg.parts) && msg.parts.length > 0) {
+    return msg.parts
+      .filter((part: any) => part && part.type === 'text')
+      .map((part: any) => part.text || '')
+      .join(' ');
+  }
+  // Si tiene content (formato legacy)
+  if (msg.content && typeof msg.content === 'string') {
+    return msg.content;
+  }
+  // Si content es un array de parts (formato alternativo)
+  if (msg.content && Array.isArray(msg.content)) {
+    return msg.content
+      .filter((part: any) => part && (part.type === 'text' || typeof part === 'string'))
+      .map((part: any) => typeof part === 'string' ? part : (part.text || ''))
+      .join(' ');
+  }
+  // Si tiene text directamente
+  if (msg.text && typeof msg.text === 'string') {
+    return msg.text;
+  }
+  return '';
+}
+
+export async function POST(req: Request) {
   try {
-    const { message, conversationHistory } = await request.json();
-
-    if (!message || typeof message !== 'string') {
-      return NextResponse.json(
-        { error: 'Mensaje inválido' },
-        { status: 400 }
+    // Validar Content-Type
+    const contentType = req.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      return new Response(
+        JSON.stringify({ error: 'Content-Type debe ser application/json' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // Sanitizar el mensaje del usuario
-    const sanitizedMessage = sanitizeText(message);
-
-    if (sanitizedMessage.length === 0) {
-      return NextResponse.json(
-        { error: 'El mensaje no puede estar vacío' },
-        { status: 400 }
+    // Parse del body con manejo de errores
+    let body;
+    try {
+      body = await req.json();
+    } catch (error) {
+      return new Response(
+        JSON.stringify({ error: 'JSON inválido en el body' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // Sanitizar el historial
-    const sanitizedHistory = conversationHistory
-      .filter((msg: any) => msg && typeof msg.role === 'string' && typeof msg.content === 'string')
-      .slice(-10)
-      .map((msg: any) => ({
-        role: msg.role,
-        content: sanitizeText(msg.content),
-      }));
+    const { messages } = body;
 
-    const messages = [
-      {
-        role: 'system' as const,
-        content: 'Eres ChadBot, un asistente virtual amable y útil. Responde de manera clara, concisa y profesional en español.',
-      },
-      ...sanitizedHistory,
-      {
-        role: 'user' as const,
-        content: sanitizedMessage,
-      },
-    ];
+    // Validación de mensajes
+    if (!messages || !validateMessages(messages)) {
+      return new Response(
+        JSON.stringify({ error: 'Formato de mensajes inválido' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
 
-    const completion = await openai.chat.completions.create({
-      model: process.env.OPENROUTER_MODEL || 'anthropic/claude-3-haiku',
-      messages,
-      max_tokens: 1000, // Limitar la longitud de la respuesta
-      temperature: 0.7, // Controlar la creatividad
+    // Sanitizar mensajes y convertir al formato esperado por streamText
+    const sanitizedMessages = messages
+      .slice(-20) // Limitar historial a últimos 20 mensajes
+      .map((msg: any) => {
+        const textContent = extractTextFromMessage(msg);
+        const sanitizedText = sanitizeText(textContent);
+        
+        // Solo incluir mensajes con contenido
+        if (sanitizedText.length === 0) return null;
+        
+        // Convertir al formato simple esperado por streamText
+        return {
+          role: msg.role,
+          content: sanitizedText,
+        };
+      })
+      .filter((msg: any) => msg !== null); // Filtrar mensajes nulos
+
+    // Validar API key
+    if (!process.env.OPENROUTER_API_KEY) {
+      console.error('OPENROUTER_API_KEY no está configurada');
+      return new Response(
+        JSON.stringify({ error: 'Configuración del servidor incompleta' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Streaming de respuesta con mensaje del sistema incluido
+    const result = await streamText({
+      model: openrouter.chat(process.env.OPENROUTER_MODEL || 'anthropic/claude-3-haiku'),
+      system: 'Eres ChadBot, un asistente virtual amable y útil. Responde de manera clara, concisa y profesional en español. No generes contenido dañino, ofensivo o inapropiado.',
+      messages: sanitizedMessages,
+      temperature: 0.7,
+      maxRetries: 2,
     });
 
-    const responseMessage = completion.choices[0]?.message?.content || 'Lo siento, no pude generar una respuesta.';
-
-    return NextResponse.json({
-      message: responseMessage,
-      success: true,
-    });
+    // Retornar stream en formato UI Message Stream para AI SDK v5
+    return result.toUIMessageStreamResponse();
   } catch (error: unknown) {
-    console.error('Error al procesar la solicitud:', error);
-    
-    let errorMessage = 'Error desconocido';
+    console.error('Error en /api/chat:', error);
+
+    // Manejo específico de errores
+    let errorMessage = 'Error interno del servidor';
     let statusCode = 500;
 
     if (error instanceof Error) {
-      errorMessage = error.message;
-      
-      // Manejar diferentes tipos de errores
-      if (errorMessage.includes('timeout')) {
+      // Timeout
+      if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
         errorMessage = 'La solicitud tardó demasiado. Por favor, intenta nuevamente.';
         statusCode = 408;
-      } else if (errorMessage.includes('API key')) {
-        errorMessage = 'Error de autenticación. Verifica tu API key.';
+      }
+      // API Key inválida
+      else if (error.message.includes('API key') || error.message.includes('401')) {
+        errorMessage = 'Error de autenticación con el servicio de IA.';
         statusCode = 401;
-      } else if (errorMessage.includes('rate limit')) {
+      }
+      // Rate limit
+      else if (error.message.includes('rate limit') || error.message.includes('429')) {
         errorMessage = 'Demasiadas solicitudes. Por favor, espera un momento.';
         statusCode = 429;
       }
+      // Modelo no disponible
+      else if (error.message.includes('model') || error.message.includes('404')) {
+        errorMessage = 'El modelo de IA no está disponible actualmente.';
+        statusCode = 503;
+      }
     }
-    
-    return NextResponse.json(
+
+    return new Response(
+      JSON.stringify({
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : 'Error desconocido') : undefined,
+      }),
       {
-        error: 'Error al procesar tu mensaje',
-        details: errorMessage,
-      },
-      { status: statusCode }
+        status: statusCode,
+        headers: { 'Content-Type': 'application/json' },
+      }
     );
   }
 }

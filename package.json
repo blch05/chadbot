@@ -9,6 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^2.0.59",
+    "@ai-sdk/react": "^2.0.86",
+    "ai": "^5.0.86",
     "next": "16.0.0",
     "openai": "^6.7.0",
     "react": "19.2.0",
