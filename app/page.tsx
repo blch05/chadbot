@@ -222,6 +222,8 @@ function DetailedBookCard({ book }: { book: any }) {
           pageCount: book.pageCount,
           categories: Array.isArray(book.categories) ? book.categories : [],
           averageRating: book.rating?.average || book.averageRating,
+          priority: 'medium',
+          notes: '',
         });
         if (result.success) {
           console.log('✅ Libro agregado a lista de lectura');

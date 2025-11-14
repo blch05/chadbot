@@ -35,6 +35,8 @@ export function useReadingList() {
     pageCount?: number;
     categories?: string[];
     averageRating?: number;
+    priority?: 'high' | 'medium' | 'low';
+    notes?: string;
   }) => {
     try {
       const response = await fetch('/api/reading-list', {

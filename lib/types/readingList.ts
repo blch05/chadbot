@@ -15,6 +15,8 @@ export interface ReadingListBook {
   userRating?: number;
   userReview?: string;
   dateFinished?: Date;
+  priority?: 'high' | 'medium' | 'low';
+  notes?: string;
 }
 
 export interface ReadingListResponse {

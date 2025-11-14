@@ -72,8 +72,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = await request.json();
-    const { bookId, title, authors, thumbnail, description, publishedDate, pageCount, categories, averageRating } = body;
+  const body = await request.json();
+  const { bookId, title, authors, thumbnail, description, publishedDate, pageCount, categories, averageRating, priority, notes } = body;
 
     if (!bookId || !title) {
       return NextResponse.json(
@@ -81,6 +81,10 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Validar priority si se proporciona
+    const allowedPriorities = ['high', 'medium', 'low'];
+    const chosenPriority = priority && allowedPriorities.includes(priority) ? priority : 'medium';
 
     const db = await getDatabase();
     
@@ -110,6 +114,9 @@ export async function POST(request: NextRequest) {
       categories: categories || [],
       averageRating,
       addedAt: new Date(),
+      isRead: false,
+      priority: chosenPriority,
+      notes: notes || '',
     };
 
     const result = await db.collection('reading_list').insertOne(newBook);
