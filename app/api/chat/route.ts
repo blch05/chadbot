@@ -232,7 +232,15 @@ export async function POST(req: Request) {
           }
 
           const data = await resp.json();
-          return { success: true, stats: data };
+          // Build a friendly summary message
+          const total = data.totalBooks ?? 0;
+          const pages = data.totalPages ?? 0;
+          const avg = data.avgRating ? Number(data.avgRating).toFixed(2) : '—';
+          const topGenre = data.topGenres && data.topGenres.length > 0 ? data.topGenres[0].genre : '—';
+          const streak = data.currentStreakDays ?? 0;
+          const chatMessage = `Tienes ${total} libro(s) leídos en el periodo seleccionado. Has leído ${pages} páginas en total. Tu género más leído es ${topGenre}. Rating promedio: ${avg}. Racha actual: ${streak} día(s).`; 
+
+          return { success: true, stats: data, message: chatMessage, chatMessage };
         } catch (error) {
           console.error('getReadingStatsTool error:', error);
           return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
