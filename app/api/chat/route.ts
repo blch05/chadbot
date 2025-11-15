@@ -1,5 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { streamText } from 'ai';
+import { streamText, tool } from 'ai';
+import { z } from 'zod';
 import { searchBooksTool, getBookDetailsTool } from '@/lib/ai/tools';
 
 // Configurar OpenRouter como proveedor personalizado
@@ -135,6 +136,110 @@ export async function POST(req: Request) {
     }
 
     // Streaming de respuesta con mensaje del sistema incluido
+    // Crear herramienta dinámica que pueda agregar libros a la lista del usuario.
+    // Esta herramienta usará las cookies de la petición original para autenticar la acción
+    // llamando al endpoint interno `/api/reading-list`.
+  const addToReadingListTool = (tool as any)({
+      description: `Agrega un libro a la lista de lectura del usuario autenticado. Si se pasa sólo bookId, la herramienta intentará obtener los detalles del libro antes de agregarlo.`,
+      parameters: z.object({
+        bookId: z.string().describe('ID del libro en Google Books'),
+        priority: z.enum(['high', 'medium', 'low']).optional().describe('Prioridad opcional'),
+        notes: z.string().optional().describe('Notas opcionales para el libro'),
+      }),
+  execute: async (params: any) => {
+        try {
+          const { bookId, priority, notes } = params;
+
+          // Obtener cookies de la petición original y reenviarlas
+          const cookieHeader = req.headers.get('cookie') || '';
+
+          // Intentar obtener detalles del libro desde nuestra API de libros
+          const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+          const detailsResp = await fetch(`${siteUrl}/api/books/${encodeURIComponent(bookId)}`);
+
+          if (!detailsResp.ok) {
+            const err = await detailsResp.json().catch(() => ({ error: 'No se pudieron obtener detalles del libro' }));
+            return { success: false, error: err.error || 'Error al obtener detalles del libro' };
+          }
+
+          const detailsData = await detailsResp.json();
+          const book = detailsData.book;
+
+          // Construir payload mínimo requerido por /api/reading-list
+          const payload: any = {
+            bookId: bookId,
+            title: book.title || 'Título desconocido',
+            authors: book.authors || [],
+            thumbnail: book.imageLinks?.thumbnail || null,
+            description: book.description || null,
+            publishedDate: book.publishedDate || null,
+            pageCount: book.pageCount || null,
+            categories: book.categories || [],
+            averageRating: book.averageRating || null,
+            priority: priority,
+            notes: notes || '',
+          };
+
+          // Llamada al endpoint interno para agregar a la lista, reenviando cookie para autenticar
+          const addResp = await fetch(`${siteUrl}/api/reading-list`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              // reenviar cookies para que el endpoint pueda verificar el token
+              cookie: cookieHeader,
+            },
+            body: JSON.stringify(payload),
+          });
+
+          if (!addResp.ok) {
+            const err = await addResp.json().catch(() => ({ error: 'Error al agregar el libro' }));
+            return { success: false, error: err.error || 'Error al agregar el libro a la lista' };
+          }
+
+          const addData = await addResp.json();
+          return { success: true, message: addData.message || 'Libro agregado a la lista', book: addData.book };
+        } catch (error) {
+          console.error('addToReadingListTool error:', error);
+          return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
+        }
+      },
+    });
+
+    // Tool para obtener estadísticas de lectura del usuario (usa cookie para autenticar)
+  const getReadingStatsTool = (tool as any)({
+      description: `Obtiene estadísticas de lectura del usuario autenticado. Parámetros: period (all-time|year|month|week), groupBy (genre|author|year).`,
+      parameters: z.object({
+        period: z.enum(['all-time', 'year', 'month', 'week']).optional(),
+        groupBy: z.enum(['genre', 'author', 'year']).optional(),
+      }),
+  execute: async (params: any) => {
+        try {
+          const cookieHeader = req.headers.get('cookie') || '';
+          const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+
+          const resp = await fetch(`${siteUrl}/api/reading-stats`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              cookie: cookieHeader,
+            },
+            body: JSON.stringify({ period: params.period || 'all-time', groupBy: params.groupBy }),
+          });
+
+          if (!resp.ok) {
+            const err = await resp.json().catch(() => ({ error: 'Error al obtener estadísticas' }));
+            return { success: false, error: err.error || 'Error al obtener estadísticas' };
+          }
+
+          const data = await resp.json();
+          return { success: true, stats: data };
+        } catch (error) {
+          console.error('getReadingStatsTool error:', error);
+          return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
+        }
+      },
+    });
+
     const result = await streamText({
       model: openrouter.chat(process.env.OPENROUTER_MODEL || 'anthropic/claude-3-haiku'),
       system: `Eres Leo, un asistente virtual especializado en libros, amable y útil. Tu misión es ayudar a los usuarios a descubrir y conocer más sobre libros. Responde de manera clara, concisa y profesional en español.
@@ -188,6 +293,8 @@ No generes contenido dañino, ofensivo o inapropiado.`,
       tools: {
         searchBooks: searchBooksTool,
         getBookDetails: getBookDetailsTool,
+        addToReadingList: addToReadingListTool,
+        getReadingStats: getReadingStatsTool,
       },
     });
 

@@ -28,6 +28,8 @@ export default function ProfilePage() {
     totalMessages: 0,
     memberSince: '',
   });
+  const [readingStats, setReadingStats] = useState<any | null>(null);
+  const [loadingReadingStatsPanel, setLoadingReadingStatsPanel] = useState(false);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loadingRecs, setLoadingRecs] = useState(true);
   const [removingBookId, setRemovingBookId] = useState<string | null>(null);
@@ -55,6 +57,9 @@ export default function ProfilePage() {
       
       // Cargar recomendaciones
       fetchRecommendations();
+
+      // Cargar estadísticas de lectura
+      loadReadingStats();
     }
   }, [user]);
   
@@ -69,6 +74,28 @@ export default function ProfilePage() {
       console.error('Error al cargar recomendaciones:', error);
     } finally {
       setLoadingRecs(false);
+    }
+  };
+
+  const loadReadingStats = async (opts?: { period?: string; groupBy?: string }) => {
+    setLoadingReadingStatsPanel(true);
+    try {
+      const response = await fetch('/api/reading-stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ period: opts?.period || 'year', groupBy: opts?.groupBy || 'genre' }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setReadingStats(data);
+      } else {
+        console.error('Error fetching reading stats', await response.text());
+      }
+    } catch (error) {
+      console.error('Error al cargar estadísticas de lectura:', error);
+    } finally {
+      setLoadingReadingStatsPanel(false);
     }
   };
   
@@ -162,6 +189,48 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Reading Stats Panel */}
+              <div className="mt-6 bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/10">
+                <h4 className="text-sm font-semibold text-white mb-2">Estadísticas de lectura</h4>
+                {loadingReadingStatsPanel ? (
+                  <div className="text-xs text-white/70">Cargando estadísticas...</div>
+                ) : readingStats ? (
+                  <div className="text-xs text-white/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span>Total leídos</span>
+                      <strong>{readingStats.totalBooks ?? 0}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Páginas totales</span>
+                      <strong>{readingStats.totalPages ?? 0}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Rating promedio</span>
+                      <strong>{readingStats.avgRating ? Number(readingStats.avgRating).toFixed(2) : '—'}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Racha actual</span>
+                      <strong>{readingStats.currentStreakDays ?? 0} días</strong>
+                    </div>
+                    {readingStats.topGenres && readingStats.topGenres.length > 0 && (
+                      <div>
+                        <div className="text-xs text-white/70 mt-2">Géneros más leídos</div>
+                        <div className="flex gap-2 flex-wrap mt-1">
+                          {readingStats.topGenres.slice(0, 5).map((g: any) => (
+                            <span key={g.genre} className="text-xs bg-white/10 px-2 py-1 rounded text-white">{g.genre} ({g.count})</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="mt-3">
+                      <button onClick={() => loadReadingStats({ period: 'year', groupBy: 'genre' })} className="text-xs px-3 py-1 bg-white text-[#4d5a44] rounded-md">Refrescar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-white/70">Sin datos aún</div>
+                )}
               </div>
 
               {/* Account Details */}
