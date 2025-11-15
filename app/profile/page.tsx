@@ -5,6 +5,7 @@ import { useReadingList } from '@/hooks/useReadingList';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { MarkAsReadModal } from '@/components/MarkAsReadModal';
+import ReadingStatsChart from '@/components/ReadingStatsChart';
 import { ReadingListBook } from '@/lib/types/readingList';
 
 interface Recommendation {
@@ -227,6 +228,12 @@ export default function ProfilePage() {
                     <div className="mt-3">
                       <button onClick={() => loadReadingStats({ period: 'year', groupBy: 'genre' })} className="text-xs px-3 py-1 bg-white text-[#4d5a44] rounded-md">Refrescar</button>
                     </div>
+                    {/* Chart */}
+                    {readingStats.booksByPeriod && readingStats.booksByPeriod.length > 0 && (
+                      <div className="mt-4">
+                        <ReadingStatsChart booksByPeriod={readingStats.booksByPeriod} />
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-xs text-white/70">Sin datos aún</div>

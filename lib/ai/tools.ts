@@ -3,7 +3,7 @@ import { tool } from 'ai';
 import { z } from 'zod';
 
 // Tool para buscar libros
-export const searchBooksTool = tool({
+export const searchBooksTool = (tool as any)({
   description: `Busca libros en Google Books API por título, autor, tema o palabras clave.
   
   Úsala cuando el usuario:
@@ -52,9 +52,12 @@ export const searchBooksTool = tool({
       const data = await response.json();
 
       // Formatear respuesta para la IA
+      const chatMessage = `He encontrado ${data.books.length} libros para "${query}". Puedes pedirme más detalles de uno usando su número o su ID.`;
+
       return {
         success: true,
         message: `Encontré ${data.books.length} libros. Cada libro tiene un ID único que puedes usar con getBookDetails para obtener información completa.`,
+        chatMessage,
         books: data.books.map((book: any, index: number) => ({
           position: index + 1,
           bookId: book.id,
@@ -88,7 +91,7 @@ export const searchBooksTool = tool({
 });
 
 // Tool para obtener detalles completos de un libro específico
-export const getBookDetailsTool = tool({
+export const getBookDetailsTool = (tool as any)({
   description: `ÚSALA CUANDO EL USUARIO PIDA MÁS INFORMACIÓN SOBRE UN LIBRO ESPECÍFICO.
   
   Esta herramienta obtiene la información COMPLETA de un libro usando su Google Books ID (bookId).
@@ -129,8 +132,11 @@ export const getBookDetailsTool = tool({
       const book = data.book;
 
       // Formatear respuesta detallada para la IA
+      const chatMessage = `Detalles del libro ${book.title} por ${book.authors?.join(', ') || 'Autor desconocido'}. Tiene ${book.pageCount || 'N/A'} páginas.`;
+
       return {
         success: true,
+        chatMessage,
         book: {
           id: book.id,
           title: book.title,
