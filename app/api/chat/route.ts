@@ -197,7 +197,8 @@ export async function POST(req: Request) {
           }
 
           const addData = await addResp.json();
-          return { success: true, message: addData.message || 'Libro agregado a la lista', book: addData.book };
+          const friendly = addData.message || 'Libro agregado a la lista';
+          return { success: true, message: friendly, chatMessage: friendly, book: addData.book };
         } catch (error) {
           console.error('addToReadingListTool error:', error);
           return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
