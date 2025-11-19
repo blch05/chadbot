@@ -43,8 +43,8 @@ async function testConnection() {
     console.log('\n📚 Bases de datos disponibles:');
     dbs.databases.forEach(db => console.log(`  - ${db.name}`));
     
-    // Verificar/crear base de datos incelbot
-    const dbName = process.env.MONGODB_DB || 'incelbot';
+    // Verificar/crear base de datos leobot
+    const dbName = process.env.MONGODB_DB || 'leobot';
     const db = client.db(dbName);
     console.log(`\n✅ Base de datos "${dbName}" configurada correctamente`);
     

@@ -37,7 +37,7 @@ if (process.env.NODE_ENV === 'development') {
 // Función helper para obtener la base de datos
 export async function getDatabase(): Promise<Db> {
   const client = await clientPromise;
-  return client.db(process.env.MONGODB_DB || 'incelbot');
+  return client.db(process.env.MONGODB_DB || 'leobot');
 }
 
 // Función para verificar la conexión

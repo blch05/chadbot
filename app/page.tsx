@@ -9,7 +9,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { useConversations } from '@/hooks/useConversations';
 import { useReadingList } from '@/hooks/useReadingList';
 
-// Helper function to extract text from message parts
 function getMessageText(message: UIMessage): string {
   let text = '';
   
@@ -17,11 +16,9 @@ function getMessageText(message: UIMessage): string {
     if (part.type === 'text') {
       text += part.text;
     } else if (part.type === 'tool-call') {
-      // Mostrar que se está usando una herramienta
       const toolName = (part as any).toolName || 'herramienta';
       text += `🔍 Buscando ${toolName === 'searchBooks' ? 'libros' : toolName}...\n`;
     } else if (part.type === 'tool-result') {
-      // Agregar indicador de que se recibieron resultados
       const result = (part as any).result;
       if (result && result.success && result.books && result.books.length > 0) {
         text += `\n✅ Encontré ${result.books.length} ${result.books.length === 1 ? 'libro' : 'libros'}\n`;
@@ -32,63 +29,7 @@ function getMessageText(message: UIMessage): string {
   return text.trim();
 }
 
-// Helper function to extract book data from tool results
-function extractBooksFromMessage(message: UIMessage): any[] {
-  const books: any[] = [];
-  
-  console.log(`🔍 Analizando mensaje ${message.id} con ${message.parts.length} parts:`);
-  
-  for (let i = 0; i < message.parts.length; i++) {
-    const part = message.parts[i];
-    const partType = part.type;
-    
-    console.log(`  Part ${i}:`, {
-      type: partType,
-      allProperties: part,
-      keys: Object.keys(part)
-    });
-    
-    // Detectar tool calls para searchBooks
-    if (partType === 'tool-searchBooks') {
-      const toolPart = part as any;
-      console.log('� Tool searchBooks detectado:', toolPart);
-      
-      // Intentar obtener los argumentos de la llamada
-      if (toolPart.args || toolPart.arguments) {
-        const args = toolPart.args || toolPart.arguments;
-        console.log('📝 Argumentos de búsqueda:', args);
-        
-        // Si tenemos query, significa que se llamó la tool
-        // Los resultados deberían estar en el part, pero si no están,
-        // podemos buscarlos en otras propiedades
-      }
-      
-      // Buscar resultado en diferentes posibles ubicaciones
-      const possibleResults = [
-        toolPart.result,
-        toolPart.content,
-        toolPart.data,
-        toolPart.output,
-        toolPart.response
-      ].filter(Boolean);
-      
-      for (const result of possibleResults) {
-        console.log('🔍 Revisando posible resultado:', result);
-        if (result && result.books && Array.isArray(result.books)) {
-          console.log(`✅ Extrayendo ${result.books.length} libros`);
-          books.push(...result.books);
-          break;
-        }
-      }
-    }
-  }
-  
-  console.log(`📚 Total de libros extraídos de mensaje ${message.id}:`, books.length);
-  return books;
-}
-
-// Componente para mostrar tarjeta de libro
-function BookCard({ book }: { book: any }) {
+function BookCard({ book }: { book: any}) {
   const [imageError, setImageError] = useState(false);
   
   const handleViewMore = async () => {

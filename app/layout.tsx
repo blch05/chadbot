@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "IncelBot - AI Assistant",
+  title: "LeoBot - Tu Librero de Confianza",
   description: "Un asistente virtual inteligente",
 };
 

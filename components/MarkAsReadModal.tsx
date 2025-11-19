@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ReadingListBook } from '@/lib/types/readingList';
 
 interface MarkAsReadModalProps {
@@ -23,6 +23,26 @@ export function MarkAsReadModal({ book, isOpen, onClose, onMarkAsRead }: MarkAsR
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hoveredStar, setHoveredStar] = useState<number>(0);
+
+  // Prefill fields when modal opens or book changes (so user can edit existing review)
+  useState(() => {});
+  // useEffect to initialize form values from book
+  useEffect(() => {
+    if (!isOpen) return;
+    // Prefill rating, review and dateFinished if available on book
+    setRating(book.userRating ?? 0);
+    setReview(book.userReview ?? '');
+    if (book.dateFinished) {
+      try {
+        const d = new Date(book.dateFinished);
+        if (!isNaN(d.getTime())) {
+          setDateFinished(d.toISOString().split('T')[0]);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [book, isOpen]);
 
   if (!isOpen) return null;
 

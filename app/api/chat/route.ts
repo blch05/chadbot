@@ -9,7 +9,7 @@ const openrouter = createOpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
   headers: {
     'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
-    'X-Title': 'IncelBot',
+    'X-Title': 'LeoBot',
   },
 });
 

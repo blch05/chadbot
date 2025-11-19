@@ -11,7 +11,7 @@ async function cleanDuplicates() {
     await client.connect();
     console.log('✅ Conectado a MongoDB');
     
-    const db = client.db(process.env.MONGODB_DB || 'incelbot');
+    const db = client.db(process.env.MONGODB_DB || 'leobot');
     const messagesCollection = db.collection('messages');
     
     // Obtener todas las conversaciones

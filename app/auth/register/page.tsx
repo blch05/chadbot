@@ -56,7 +56,7 @@ export default function RegisterPage() {
             <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-[#616f55] to-[#4d5a44] rounded-full flex items-center justify-center shadow-lg">
               <span className="text-white font-bold text-3xl">I</span>
             </div>
-            <h1 className="text-3xl font-bold text-[#251711] mb-2">IncelBot</h1>
+            <h1 className="text-3xl font-bold text-[#251711] mb-2">LeoBot</h1>
             <p className="text-gray-600">Crea tu cuenta</p>
           </div>
 

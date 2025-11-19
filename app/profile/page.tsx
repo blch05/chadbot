@@ -369,18 +369,25 @@ export default function ProfilePage() {
                                 </span>
                               )}
                             </div>
+                            {/* Review preview */}
+                            {book.userReview && (
+                              <div className="text-xs text-white/70 mb-2">
+                                <strong className="text-white">Reseña:</strong> {book.userReview.length > 200 ? `${book.userReview.slice(0, 200)}...` : book.userReview}
+                              </div>
+                            )}
+
                             <div className="flex gap-2">
-                              {!book.isRead && (
-                                <button
-                                  onClick={() => setSelectedBookForRead(book)}
-                                  className="inline-flex items-center gap-1 text-xs text-white bg-white/20 hover:bg-white/30 px-2 py-1 rounded font-medium transition-colors"
-                                >
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                  Marcar como Leído
-                                </button>
-                              )}
+                              {/* Edit/Add review button - opens the modal prefilled */}
+                              <button
+                                onClick={() => setSelectedBookForRead(book)}
+                                className="inline-flex items-center gap-1 text-xs text-white bg-white/20 hover:bg-white/30 px-2 py-1 rounded font-medium transition-colors"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                {book.userReview ? 'Editar reseña' : 'Añadir reseña'}
+                              </button>
+
                               <button
                                 onClick={() => handleRemoveFromList(book.bookId)}
                                 disabled={removingBookId === book.bookId}

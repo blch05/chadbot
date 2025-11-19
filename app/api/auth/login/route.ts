@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
 
     // Establecer cookie HttpOnly
     response.cookies.set({
-      name: process.env.SESSION_COOKIE_NAME || 'incelbot-session',
+      name: process.env.SESSION_COOKIE_NAME || 'leobot-session',
       value: token,
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

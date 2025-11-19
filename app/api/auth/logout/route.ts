@@ -15,7 +15,7 @@ export async function POST() {
 
     // Eliminar cookie de sesión
     response.cookies.set({
-      name: process.env.SESSION_COOKIE_NAME || 'incelbot-session',
+      name: process.env.SESSION_COOKIE_NAME || 'leobot-session',
       value: '',
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

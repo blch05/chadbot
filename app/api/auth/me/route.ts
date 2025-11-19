@@ -6,7 +6,7 @@ export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
   try {
-    const token = req.cookies.get(process.env.SESSION_COOKIE_NAME || 'incelbot-session')?.value;
+    const token = req.cookies.get(process.env.SESSION_COOKIE_NAME || 'leobot-session')?.value;
 
     if (!token) {
       return NextResponse.json<AuthResponse>(
