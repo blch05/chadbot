@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ChadBot - AI Assistant",
-  description: "Your intelligent chat assistant",
+  title: "LeoBot - Tu Librero de Confianza",
+  description: "Un asistente virtual inteligente",
 };
 
 export default function RootLayout({

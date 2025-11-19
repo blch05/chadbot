@@ -1,5 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { streamText } from 'ai';
+import { streamText, tool } from 'ai';
+import { z } from 'zod';
+import { searchBooksTool, getBookDetailsTool } from '@/lib/ai/tools';
 
 // Configurar OpenRouter como proveedor personalizado
 const openrouter = createOpenAI({
@@ -7,7 +9,7 @@ const openrouter = createOpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
   headers: {
     'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
-    'X-Title': 'ChadBot',
+    'X-Title': 'LeoBot',
   },
 });
 
@@ -134,12 +136,175 @@ export async function POST(req: Request) {
     }
 
     // Streaming de respuesta con mensaje del sistema incluido
+    // Crear herramienta dinámica que pueda agregar libros a la lista del usuario.
+    // Esta herramienta usará las cookies de la petición original para autenticar la acción
+    // llamando al endpoint interno `/api/reading-list`.
+  const addToReadingListTool = (tool as any)({
+      description: `Agrega un libro a la lista de lectura del usuario autenticado. Si se pasa sólo bookId, la herramienta intentará obtener los detalles del libro antes de agregarlo.`,
+      parameters: z.object({
+        bookId: z.string().describe('ID del libro en Google Books'),
+        priority: z.enum(['high', 'medium', 'low']).optional().describe('Prioridad opcional'),
+        notes: z.string().optional().describe('Notas opcionales para el libro'),
+      }),
+  execute: async (params: any) => {
+        try {
+          const { bookId, priority, notes } = params;
+
+          // Obtener cookies de la petición original y reenviarlas
+          const cookieHeader = req.headers.get('cookie') || '';
+
+          // Intentar obtener detalles del libro desde nuestra API de libros
+          const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+          const detailsResp = await fetch(`${siteUrl}/api/books/${encodeURIComponent(bookId)}`);
+
+          if (!detailsResp.ok) {
+            const err = await detailsResp.json().catch(() => ({ error: 'No se pudieron obtener detalles del libro' }));
+            return { success: false, error: err.error || 'Error al obtener detalles del libro' };
+          }
+
+          const detailsData = await detailsResp.json();
+          const book = detailsData.book;
+
+          // Construir payload mínimo requerido por /api/reading-list
+          const payload: any = {
+            bookId: bookId,
+            title: book.title || 'Título desconocido',
+            authors: book.authors || [],
+            thumbnail: book.imageLinks?.thumbnail || null,
+            description: book.description || null,
+            publishedDate: book.publishedDate || null,
+            pageCount: book.pageCount || null,
+            categories: book.categories || [],
+            averageRating: book.averageRating || null,
+            priority: priority,
+            notes: notes || '',
+          };
+
+          // Llamada al endpoint interno para agregar a la lista, reenviando cookie para autenticar
+          const addResp = await fetch(`${siteUrl}/api/reading-list`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              // reenviar cookies para que el endpoint pueda verificar el token
+              cookie: cookieHeader,
+            },
+            body: JSON.stringify(payload),
+          });
+
+          if (!addResp.ok) {
+            const err = await addResp.json().catch(() => ({ error: 'Error al agregar el libro' }));
+            return { success: false, error: err.error || 'Error al agregar el libro a la lista' };
+          }
+
+          const addData = await addResp.json();
+          const friendly = addData.message || 'Libro agregado a la lista';
+          return { success: true, message: friendly, chatMessage: friendly, book: addData.book };
+        } catch (error) {
+          console.error('addToReadingListTool error:', error);
+          return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
+        }
+      },
+    });
+
+    // Tool para obtener estadísticas de lectura del usuario (usa cookie para autenticar)
+  const getReadingStatsTool = (tool as any)({
+      description: `Obtiene estadísticas de lectura del usuario autenticado. Parámetros: period (all-time|year|month|week), groupBy (genre|author|year).`,
+      parameters: z.object({
+        period: z.enum(['all-time', 'year', 'month', 'week']).optional(),
+        groupBy: z.enum(['genre', 'author', 'year']).optional(),
+      }),
+  execute: async (params: any) => {
+        try {
+          const cookieHeader = req.headers.get('cookie') || '';
+          const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+
+          const resp = await fetch(`${siteUrl}/api/reading-stats`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              cookie: cookieHeader,
+            },
+            body: JSON.stringify({ period: params.period || 'all-time', groupBy: params.groupBy }),
+          });
+
+          if (!resp.ok) {
+            const err = await resp.json().catch(() => ({ error: 'Error al obtener estadísticas' }));
+            return { success: false, error: err.error || 'Error al obtener estadísticas' };
+          }
+
+          const data = await resp.json();
+          // Build a friendly summary message
+          const total = data.totalBooks ?? 0;
+          const pages = data.totalPages ?? 0;
+          const avg = data.avgRating ? Number(data.avgRating).toFixed(2) : '—';
+          const topGenre = data.topGenres && data.topGenres.length > 0 ? data.topGenres[0].genre : '—';
+          const streak = data.currentStreakDays ?? 0;
+          const chatMessage = `Tienes ${total} libro(s) leídos en el periodo seleccionado. Has leído ${pages} páginas en total. Tu género más leído es ${topGenre}. Rating promedio: ${avg}. Racha actual: ${streak} día(s).`; 
+
+          return { success: true, stats: data, message: chatMessage, chatMessage };
+        } catch (error) {
+          console.error('getReadingStatsTool error:', error);
+          return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
+        }
+      },
+    });
+
     const result = await streamText({
       model: openrouter.chat(process.env.OPENROUTER_MODEL || 'anthropic/claude-3-haiku'),
-      system: 'Eres ChadBot, un asistente virtual amable y útil. Responde de manera clara, concisa y profesional en español. No generes contenido dañino, ofensivo o inapropiado.',
+      system: `Eres Leo, un asistente virtual especializado en libros, amable y útil. Tu misión es ayudar a los usuarios a descubrir y conocer más sobre libros. Responde de manera clara, concisa y profesional en español.
+
+REGLAS IMPORTANTES SOBRE LAS HERRAMIENTAS:
+
+1. **searchBooks**: Úsala para búsquedas de libros (múltiples resultados)
+   - "libros de terror" → searchBooks con query="terror"
+   - "novelas de García Márquez" → searchBooks con query="García Márquez"
+   - "libros de romance" → searchBooks con query="romance"
+   - ⚠️ CADA NUEVA BÚSQUEDA ES INDEPENDIENTE - Ignora búsquedas anteriores
+   - ⚠️ NO combines múltiples búsquedas en una sola query
+
+2. **getBookDetails**: Úsala para información detallada de UN libro específico
+   - "Dame más información del primer libro"
+   - "Detalles del libro [bookId]"
+   - Requiere el bookId del libro
+   - Devuelve información COMPLETA
+
+COMPORTAMIENTO CON BÚSQUEDAS SECUENCIALES:
+
+Situación: Usuario hace una búsqueda, luego pide otra DIFERENTE
+Usuario: "libros de terror"
+Tú: [searchBooks con query="terror"]
+Usuario: "ahora de romance"  ← NUEVA BÚSQUEDA INDEPENDIENTE
+Tú: [searchBooks con query="romance"]  ← SOLO romance, NO "terror y romance"
+⛔ NO combines: "terror romance"
+⛔ NO uses: query="terror y romance"
+✅ USA: query="romance" (SOLO el nuevo tema)
+
+Situación: Usuario pide detalles después de búsqueda
+Usuario: "libros de ciencia ficción"
+Tú: [searchBooks con query="ciencia ficción"]
+Usuario: "más info del primero"  ← PIDE DETALLES, NO NUEVA BÚSQUEDA
+Tú: [getBookDetails con bookId del primer libro]
+⛔ NO uses searchBooks de nuevo
+
+REGLAS CRÍTICAS:
+❌ NUNCA combines temas de búsquedas diferentes
+❌ NUNCA uses searchBooks Y getBookDetails en la misma respuesta
+❌ Una herramienta por respuesta
+❌ Cada búsqueda es INDEPENDIENTE de las anteriores
+✅ Nueva búsqueda = Ignora la anterior completamente
+✅ Usa SOLO el tema que el usuario menciona en su último mensaje
+✅ "ahora de X" = searchBooks con query="X" solamente
+
+No generes contenido dañino, ofensivo o inapropiado.`,
       messages: sanitizedMessages,
       temperature: 0.7,
       maxRetries: 2,
+      tools: {
+        searchBooks: searchBooksTool,
+        getBookDetails: getBookDetailsTool,
+        addToReadingList: addToReadingListTool,
+        getReadingStats: getReadingStatsTool,
+      },
     });
 
     // Retornar stream en formato UI Message Stream para AI SDK v5
